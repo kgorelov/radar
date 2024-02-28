@@ -1,0 +1,245 @@
+#if 0
+//int main(int argc, char* argv[])
+int main()
+{
+    // Initialize SDL
+    if(SDL_Init(SDL_INIT_VIDEO) < 0)
+    {
+        std::cout << "SDL could not be initialized!" << std::endl
+                  << "SDL_Error: " << SDL_GetError() << std::endl;
+        return 0;
+    }
+
+#if defined linux && SDL_VERSION_ATLEAST(2, 0, 8)
+    // Disable compositor bypass
+    if(!SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0"))
+    {
+        std::cout << "SDL can not disable compositor bypass!" << std::endl;
+        return 0;
+    }
+#endif
+
+    // Create window
+    SDL_Window *window = SDL_CreateWindow("Radar",
+                                          SDL_WINDOWPOS_UNDEFINED,
+                                          SDL_WINDOWPOS_UNDEFINED,
+                                          SCREEN_WIDTH, SCREEN_HEIGHT,
+                                          SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN);
+    if(!window)
+    {
+        std::cout << "Window could not be created!" << std::endl
+                  << "SDL_Error: " << SDL_GetError() << std::endl;
+    }
+    else
+    {
+        // Create renderer
+        SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+        if(!renderer)
+        {
+            std::cout << "Renderer could not be created!" << std::endl
+                      << "SDL_Error: " << SDL_GetError() << std::endl;
+        }
+        else
+        {
+            // Event loop exit flag
+            bool quit = false;
+
+            unsigned char GreenGlow = 0xbb;
+            bool GlowUp = false;
+            Sint16 BeamAngle = 0;
+            Sint16 BeamStep = 1;
+
+            FPSmanager fpsmanager;
+            SDL_initFramerate(&fpsmanager);
+            SDL_setFramerate(&fpsmanager, 30);
+
+            // Event loop
+            while(!quit)
+            {
+                SDL_Event e;
+
+                while(SDL_PollEvent(&e))
+                {
+                    // User requests quit
+                    if(e.type == SDL_QUIT)
+                    {
+                        quit = true;
+                        break;
+                    }
+                    else if(e.type == SDL_KEYDOWN)
+                    {
+                        switch (e.key.keysym.sym)
+                        {
+                            case SDLK_ESCAPE:
+                            case SDLK_q:
+                                quit = true;
+                                break;
+                            case SDLK_SPACE:
+                                if (BeamStep != 0) {
+                                    BeamStep = 0;
+                                } else {
+                                    BeamStep = 1;
+                                }
+                                break;
+                        }
+                    }
+                }
+
+                // Initialize renderer color white for the background
+                //SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+                SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xFF);
+
+                // Clear screen
+                SDL_RenderClear(renderer);
+
+                // Set renderer color blue to draw the square
+                // SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0x00, 0xFF);
+                // SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xFF, 0xFF);
+
+                Sint16 radarRadius = std::min(SCREEN_WIDTH/2, SCREEN_HEIGHT);
+                Sint16 radarX = SCREEN_WIDTH/2;
+                Sint16 radarY = SCREEN_HEIGHT;
+
+                if (GreenGlow >= 0xee) {GlowUp = false;}
+                if (GreenGlow <= 0x88) {GlowUp = true;}
+                GreenGlow = GreenGlow + (GlowUp ? 1: -1);
+
+                // gfxPrimitivesSetFontRotation(0);
+                for (int r = 80; r <= radarRadius; r += 80) {
+                    arcRGBA(renderer, radarX, radarY, r, 180, 360, 0x00, GreenGlow, 0x00, 0xFF);
+                    std::stringstream ss;
+                    ss << r;
+                    stringRGBA(renderer, radarX +8, radarY - r +8, ss.str().c_str(), 0x00, GreenGlow, 0x00, 0xFF);
+                }
+
+                for (int a = 0; a <= 180; a += 15) {
+                    double arad = a * M_PI / 180;
+                    Sint16 x1 = (radarRadius+5) * cos(arad);
+                    Sint16 y1 = (radarRadius+5) * sin(arad);
+
+                    lineRGBA(renderer, radarX, radarY, radarX + x1, radarY - y1, 0x00, GreenGlow, 0x00, 0xFF);
+
+                    // Sint16 r2 = radarRadius + 15 + (a>90 ? (90-a)*a/180 : 0);
+                    Sint16 r2 = radarRadius + 5 + a/6;
+                    x1 = r2 * cos(arad);
+                    y1 = r2 * sin(arad);
+
+                    stringRGBA(renderer, radarX + x1, radarY - y1, std::to_string(a).c_str(), 0x00, GreenGlow, 0x00, 0xFF);
+                }
+
+                // beam
+                {
+                    filledPieRGBA(renderer, radarX, radarY, radarRadius, 180+BeamAngle-2, 180+BeamAngle+2, GreenGlow/1.5, GreenGlow/1.5, 0x00, 0x55);
+                    filledPieRGBA(renderer, radarX, radarY, radarRadius, 180+BeamAngle-1, 180+BeamAngle+1, 0x00, GreenGlow, 0x00, 0x55);
+                }
+
+                // a dot
+                {
+                    Sint16 a = 50;
+                    Sint16 r = 400;
+                    Sint16 x = radarX + r * cos(a * M_PI / 180);
+                    Sint16 y = radarY - r * sin(a * M_PI / 180);
+                
+                    filledCircleRGBA(renderer, x, y, 15, 0x00, 0xFF, 0x00, 0x88);
+                    filledCircleRGBA(renderer, x, y, 10, 0x00, 0xFF, 0x00, 0xaa);
+                    filledCircleRGBA(renderer, x, y, 3, 0x00, 0xFF, 0x00, 0xee);
+                }
+
+                std::stringstream ss;
+                ss << "FPS:60  |  GG: " << (int)GreenGlow << "  |  STATUS: OK";
+                stringRGBA(renderer, 10, 10, ss.str().c_str(), 0x00, 0xFF, 0x00, 0xFF);
+
+                if (BeamAngle <= 0) {BeamStep = 1;}
+                if (BeamAngle >= 180) {BeamStep = -1;}
+                BeamAngle = BeamAngle + BeamStep;
+
+                // Update screen
+                SDL_RenderPresent(renderer);
+
+                // Delay
+                SDL_framerateDelay(&fpsmanager);
+            }
+
+            // Destroy renderer
+            SDL_DestroyRenderer(renderer);
+        }
+
+        // Destroy window
+        SDL_DestroyWindow(window);
+    }
+
+    // Quit SDL
+    SDL_Quit();
+
+    return 0;
+}
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+#if 0
+        // Render all objects
+        Sint16 radarRadius = std::min(SCREEN_WIDTH/2, SCREEN_HEIGHT);
+        Sint16 radarX = SCREEN_WIDTH/2;
+        Sint16 radarY = SCREEN_HEIGHT;
+
+        if (GreenGlow >= 0xee) {GlowUp = false;}
+        if (GreenGlow <= 0x88) {GlowUp = true;}
+        GreenGlow = GreenGlow + (GlowUp ? 1: -1);
+
+        for (int r = 80; r <= radarRadius; r += 80) {
+            arcRGBA(Renderer, radarX, radarY, r, 180, 360, 0x00, GreenGlow, 0x00, 0xFF);
+            std::stringstream ss;
+            ss << r;
+            stringRGBA(Renderer, radarX +8, radarY - r +8, ss.str().c_str(), 0x00, GreenGlow, 0x00, 0xFF);
+        }
+
+        for (int a = 0; a <= 180; a += 15) {
+            double arad = a * M_PI / 180;
+            Sint16 x1 = (radarRadius+5) * cos(arad);
+            Sint16 y1 = (radarRadius+5) * sin(arad);
+
+            lineRGBA(Renderer, radarX, radarY, radarX + x1, radarY - y1, 0x00, GreenGlow, 0x00, 0xFF);
+
+            Sint16 r2 = radarRadius + 5 + a/6;
+            x1 = r2 * cos(arad);
+            y1 = r2 * sin(arad);
+
+            stringRGBA(Renderer, radarX + x1, radarY - y1, std::to_string(a).c_str(), 0x00, GreenGlow, 0x00, 0xFF);
+        }
+
+        // beam
+        {
+            filledPieRGBA(Renderer, radarX, radarY, radarRadius, 180+BeamAngle-2, 180+BeamAngle+2, GreenGlow/1.5, GreenGlow/1.5, 0x00, 0x55);
+            filledPieRGBA(Renderer, radarX, radarY, radarRadius, 180+BeamAngle-1, 180+BeamAngle+1, 0x00, GreenGlow, 0x00, 0x55);
+        }
+
+        // a dot
+        {
+            Sint16 a = 50;
+            Sint16 r = 400;
+            Sint16 x = radarX + r * cos(a * M_PI / 180);
+            Sint16 y = radarY - r * sin(a * M_PI / 180);
+                
+            filledCircleRGBA(Renderer, x, y, 15, 0x00, 0xFF, 0x00, 0x88);
+            filledCircleRGBA(Renderer, x, y, 10, 0x00, 0xFF, 0x00, 0xaa);
+            filledCircleRGBA(Renderer, x, y, 3, 0x00, 0xFF, 0x00, 0xee);
+        }
+
+        std::stringstream ss;
+        ss << "FPS:60  |  GG: " << (int)GreenGlow << "  |  STATUS: OK";
+        stringRGBA(Renderer, 10, 10, ss.str().c_str(), 0x00, 0xFF, 0x00, 0xFF);
+
+        if (BeamAngle <= 0) {BeamStep = 1;}
+        if (BeamAngle >= 180) {BeamStep = -1;}
+        BeamAngle = BeamAngle + BeamStep;
+#endif
